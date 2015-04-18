@@ -1,0 +1,15 @@
+config wifi-device  radio0
+	option type     mac80211
+	option channel  11
+	option hwmode	11g
+	option path	'10180000.wmac'
+	option htmode	HT20
+	# REMOVE THIS LINE TO ENABLE WIFI:
+
+config wifi-iface
+	option device   radio0
+	option network  lan
+	option mode     ap # change to mesh. creates a msh1 mesh point interface. "iw" package used to setup mesh links.
+	option ssid     OpenWrt-White
+	option encryption none
+#	option maxassoc 1

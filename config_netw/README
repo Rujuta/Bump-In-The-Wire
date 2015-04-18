@@ -1,0 +1,2 @@
+This the set of configuration files that allows pinging from 192.168.2.222 to 192.168.1.196. 
+2.1 is WAN 1.1 is LAN(br-lan)
