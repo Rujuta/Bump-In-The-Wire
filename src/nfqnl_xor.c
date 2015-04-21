@@ -4,10 +4,14 @@
  #include <netinet/in.h>
  #include <linux/types.h>
  #include <linux/netfilter.h>            /* for NF_ACCEPT */
- 
- #include <libnetfilter_queue/libnetfilter_queue.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <errno.h>
+#include <libnetfilter_queue/libnetfilter_queue.h>
 
- static char KEY = (char) 0xFF;
+static char KEY = (char) 0xFF; // why is ths typecast to a char?
+
+struct sockaddr_in source, dest;
  
  /* returns packet id */
  static u_int32_t xor_pkt (struct nfq_data *tb)
@@ -58,24 +62,30 @@
          ret = nfq_get_payload(tb, &data);
          if (ret >= 0) {
                 printf("payload_len=%d ", ret);
-		unsigned char *ch = data;
+		struct iphdr *iph = (struct iphdr*) data; //typecast  to iphdr 
+		int iphdr_len = iph->ihl*4; //get the total len of iphdr 
+		//struct icmphr *icmp;
+		unsigned char* ch = data+iphdr_len + sizeof(struct icmphdr);  //only modify and print data packets. 
+	        //icmp = (struct icmphdr*) data;
+		int payload_len = ret - iphdr_len;
+		//unsigned char *ch = data;
 		int gap;
 		int i;
-		for(i = 0; i < ret; i++) {
+		for(i = 0; i < payload_len; i++) {
 			*ch = *ch ^ KEY; 
-			printf("%02x ", *((unsigned int*)ch) & 0xFF);
+			//printf("%02x ", *((unsigned int*)ch) & 0xFF); //why is it type cast to an unsigned int?//xored packet
 			ch++;
 			/* print extra space after 8th byte for visual aid */
 			if (i == 7)
 				printf(" ");
 		}
 		/* print space to handle line less than 8 bytes */
-		if (ret < 8)
+		if (payload_len < 8)
 			printf(" ");
 		
 		/* fill hex gap with spaces if not full line */
-		if (ret < 16) {
-			gap = 16 - ret;
+		if (payload_len < 16) {
+			gap = 16 - payload_len;
 			for (i = 0; i < gap; i++) {
 				printf("   ");
 			}
@@ -87,6 +97,32 @@
  
          return id;
  }
+
+void print_ip(struct nfq_data *tb){
+	
+		unsigned char *data;	
+		int ret = nfq_get_payload(tb, &data);
+	
+		struct iphdr *iph = (struct iphdr*) data; //typecast  to iphdr 
+		int iphdr_len = iph->ihl*4; //get the total len of iphdr 
+		
+		memset(&source, 0, sizeof(source));
+		source.sin_addr.s_addr = iph->saddr;
+
+		
+		memset(&dest, 0, sizeof(dest));
+		dest.sin_addr.s_addr = iph->daddr;
+		//print source IP and destination IP
+		char str[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &(source.sin_addr), str, INET_ADDRSTRLEN);
+		printf("Source addr: %s\n",str);
+		inet_ntop(AF_INET, &(dest.sin_addr), str, INET_ADDRSTRLEN);
+		printf("Destination addr: %s",str);
+		
+		/*Print out packet details*/
+		printf("Protocol: %d\n",(unsigned int)iph->protocol);
+		
+}
  
  /* returns packet id */
  static u_int32_t print_pkt (struct nfq_data *tb)
@@ -141,6 +177,8 @@
 		int gap;
 		int i;
 		for(i = 0; i < ret; i++) {
+			
+			
 			printf("%02x ", *((unsigned int*)ch) & 0xFF);
 			ch++;
 			/* print extra space after 8th byte for visual aid */
@@ -170,11 +208,17 @@
  static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                struct nfq_data *nfa, void *data)
  {
-         u_int32_t id = print_pkt(nfa);
-         id = xor_pkt(nfa);
+	
 	 printf("entering callback\n");
+         u_int32_t id = print_pkt(nfa);
+	 print_ip(nfa);
+	 printf("\n Printing packet After XOR\n");
+         id = xor_pkt(nfa);
+	 print_ip(nfa);
+	 print_pkt(nfa);
 	 char *payload;
 	 int len = nfq_get_payload(nfa, &payload);
+	 printf("\nDone with Call back\n");
          return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
  }
  
