@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
+#define DEBUG 0
+
 static char KEY = (char) 0xFF; // why is ths typecast to a char?
 
 struct sockaddr_in source, dest;
@@ -26,42 +28,24 @@ struct sockaddr_in source, dest;
          ph = nfq_get_msg_packet_hdr(tb);
          if (ph) {
                  id = ntohl(ph->packet_id);
-                 printf("hw_protocol=0x%04x hook=%u id=%u ",
-                         ntohs(ph->hw_protocol), ph->hook, id);
          }
  
          hwph = nfq_get_packet_hw(tb);
          if (hwph) {
                  int i, hlen = ntohs(hwph->hw_addrlen);
- 
-                 printf("hw_src_addr=");
-                 for (i = 0; i < hlen-1; i++)
-                         printf("%02x:", hwph->hw_addr[i]);
-                 printf("%02x ", hwph->hw_addr[hlen-1]);
          }
  
          mark = nfq_get_nfmark(tb);
-         if (mark)
-                 printf("mark=%u ", mark);
  
          ifi = nfq_get_indev(tb);
-         if (ifi)
-                 printf("indev=%u ", ifi);
  
          ifi = nfq_get_outdev(tb);
-         if (ifi)
-                 printf("outdev=%u ", ifi);
          ifi = nfq_get_physindev(tb);
-         if (ifi)
-                 printf("physindev=%u ", ifi);
  
          ifi = nfq_get_physoutdev(tb);
-         if (ifi)
-                 printf("physoutdev=%u ", ifi);
  
          ret = nfq_get_payload(tb, &data);
          if (ret >= 0) {
-                printf("payload_len=%d ", ret);
 		struct iphdr *iph = (struct iphdr*) data; //typecast  to iphdr 
 		int iphdr_len = iph->ihl*4; //get the total len of iphdr 
 		//struct icmphr *icmp;
@@ -73,28 +57,9 @@ struct sockaddr_in source, dest;
 		int i;
 		for(i = 0; i < payload_len; i++) {
 			*ch = *ch ^ KEY; 
-			//printf("%02x ", *((unsigned int*)ch) & 0xFF); //why is it type cast to an unsigned int?//xored packet
 			ch++;
-			/* print extra space after 8th byte for visual aid */
-			if (i == 7)
-				printf(" ");
 		}
-		/* print space to handle line less than 8 bytes */
-		if (payload_len < 8)
-			printf(" ");
-		
-		/* fill hex gap with spaces if not full line */
-		if (payload_len < 16) {
-			gap = 16 - payload_len;
-			for (i = 0; i < gap; i++) {
-				printf("   ");
-			}
-		}
-		printf("   ");
 	}
- 
-         fputc('\n', stdout);
- 
          return id;
  }
 
@@ -208,17 +173,22 @@ void print_ip(struct nfq_data *tb){
  static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
                struct nfq_data *nfa, void *data)
  {
-	
+	u_int32_t id;
+	 if (DEBUG) {
 	 printf("entering callback\n");
-         u_int32_t id = print_pkt(nfa);
-	 print_ip(nfa);
-	 printf("\n Printing packet After XOR\n");
-         id = xor_pkt(nfa);
-	 print_ip(nfa);
-	 print_pkt(nfa);
+         	id = print_pkt(nfa);
+	 	print_ip(nfa);
+	 	printf("\n Printing packet After XOR\n");
+         }
+	 id = xor_pkt(nfa);
+	 if(DEBUG) {
+		print_ip(nfa);
+	 	print_pkt(nfa);
+	 }
 	 char *payload;
 	 int len = nfq_get_payload(nfa, &payload);
-	 printf("\nDone with Call back\n");
+	 if (DEBUG)
+	 	printf("\nDone with Call back\n");
          return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
  }
  
@@ -266,7 +236,8 @@ void print_ip(struct nfq_data *tb){
          fd = nfq_fd(h);
  
          while ((rv = recv(fd, buf, sizeof(buf), 0)) && rv >= 0) {
-                 printf("pkt received\n");
+                 if (DEBUG)
+			printf("pkt received\n");
                  nfq_handle_packet(h, buf, rv);
          }
  
