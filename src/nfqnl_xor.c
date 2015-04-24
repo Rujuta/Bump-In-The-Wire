@@ -185,7 +185,7 @@ void print_ip(struct nfq_data *tb){
 		print_ip(nfa);
 	 	print_pkt(nfa);
 	 }
-	if (DEUBG) {
+	if (DEBUG) {
 	 	printf("\n Printing packet AFTER XOR\n");
 		print_pkt(nfa);
 	 	print_ip(nfa);
