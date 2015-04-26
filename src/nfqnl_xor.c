@@ -175,16 +175,17 @@ void print_ip(struct nfq_data *tb){
  {
 	u_int32_t id;
 	 if (DEBUG) {
-	 printf("entering callback\n");
-         	id = print_pkt(nfa);
+		printf("entering callback\n");
+	 	printf("\n Printing packet BEFORE XOR\n");
 	 	print_ip(nfa);
-	 	printf("\n Printing packet After XOR\n");
+         	print_pkt(nfa);
          }
 	 id = xor_pkt(nfa);
-	 if(DEBUG) {
-		print_ip(nfa);
-	 	print_pkt(nfa);
-	 }
+	if (DEBUG) {
+	 	printf("\n Printing packet AFTER XOR\n");
+	 	print_ip(nfa);
+		print_pkt(nfa);
+	}
 	 char *payload;
 	 int len = nfq_get_payload(nfa, &payload);
 	 if (DEBUG)
