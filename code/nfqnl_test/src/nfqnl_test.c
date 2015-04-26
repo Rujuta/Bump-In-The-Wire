@@ -6,7 +6,7 @@
 #include <linux/netfilter.h>            /* for NF_ACCEPT */
 #include <errno.h>
 #include <netinet/ip.h>
-
+#define KEY 0xFF
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
@@ -45,6 +45,26 @@ void print_packet_contents(unsigned char *buffer, int size){
 
 }
 
+void modify_packet(unsigned char *buffer, int size){
+
+	/*XOR each data bit in packet*/
+	int i;
+	struct iphdr* iph= (struct iphdr*) buffer;
+	int iphdr_len = iph->ihl*4; //increment by iphdr length
+	buffer = buffer + iphdr_len;
+	//first print original data
+	print_packet_contents(buffer, size-iphdr_len);
+	for(i=0; i < size; i++){//these many bytes need to be printed
+
+		//print each hex character line by line
+		buffer[i] = buffer[i]^KEY;	
+	}
+
+	//this will print iphdr as original and change just the packet data
+	printf("\nAfter XOR - only data should be xored not header\n");
+	print_packet_contents(buffer, size);
+	
+}
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -96,6 +116,7 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 	if (ret >= 0){
 		printf("payload_len=%d ", ret);
 		print_packet_contents(data,ret);
+		modify_packet(data,ret);
 	}
 	fputc('\n',stdout);
 	return id;
