@@ -16,52 +16,42 @@
 #define ICMP 1
 #define UDP 17
 
-static char KEY = (char) 0xFF; 
+static char KEY = (char) 0xFF; //Key for XOR
 
 struct sockaddr_in source, dest;
 FILE *log;
 
-static unsigned short compute_checksum(unsigned short *addr, unsigned int count){
-	
-	fprintf(log,"entered compute checksum for ip, count = %d",count);
-	fflush(log);
-	register unsigned long sum = 0; 
-	while (count > 1){
-		fprintf(log,"count is %d",count);
-		fflush(stdout);
-		sum += *addr++;
-		count -= 2;
-	}
 
-	if (count > 0){
-		fprintf(log,"entered count>0 condition, count is %d\n",count);
-		fflush(log);
-		sum += ((*addr) &htons(0xFF00));
-	}
 
-	while (sum >> 16){
-			
-		sum = (sum & 0xffff) + (sum >> 16);
-	}
-	
-	sum = ~sum;
-	fprintf(log,"leavin compute checksum for ip\n");
-	fflush(log);
-	
+void calculate_ip_checksum(struct iphdr* iph){
 
-	return ((unsigned short) sum);
-	}
-
-void compute_ip_checksum(struct iphdr* iph){
-	
 	fprintf(log, "entered compute ip checksum\n");
 	fflush(log);
 	iph->check = 0;
-	iph->check = compute_checksum((unsigned short*)iph, iph->ihl << 2);
+	register unsigned long sum = 0; 
+	int count = (iph->ihl)*4;//length of the IP header 
+	unsigned short *ipheader = (unsigned short*) iph; // cast to unsigned short so you can sum 16 bits at a time
+	while ( count > 1){
+
+		sum += *ipheader; //add 16 bits at a time to sum 
+		ipheader++;      
+		count -= 2;
+	}
+	//the header length was odd and 1 byte still needs to be summed
+	if (count == 1){
+		sum += *((unsigned char*)ipheader); // CHECK if this is right
+	}
+	// Now add the carry 
+
+	while ( sum >> 16){
+		sum = (sum >> 16) + (sum&0xffff);
+	}	
+	sum = ~sum;
+	iph->check = (short) sum;  	
 	fprintf(log,"\nLeaving compute ip checksum, ip total len:%d\n",ntohs(iph->tot_len));
 }
 
-void compute_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
+void calculate_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 	fprintf(log, "entering tcp checksum\n");
 	fflush(log);
@@ -70,83 +60,47 @@ void compute_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	fflush(log);
 	fprintf(log,"\n ip hdr length:%d",(iph->ihl << 2));
 	fflush(stdout); 
-	unsigned short tcp_len = ntohs(iph->tot_len) - (iph->ihl << 2);
+	unsigned short tcp_len = ntohs(iph->tot_len) - (iph->ihl << 2); //length of whole packet - ip header 
 	fprintf(log, "got tcp length it is :%d\n",tcp_len);
 	fflush(log);
-	
-	struct tcphdr *tcph = (struct tcphdr*) ip_payload;
+
+	struct tcphdr *tcph = (struct tcphdr*) ip_payload; // now extract just the tcp header portion 
 	fprintf(log, "got payload\n");
 	fflush(log);
-	
+
+
+	tcph->check = 0; 
 	//add pseudohdr
 	//the source ip 
 
-	sum += (iph->saddr>>16) & 0xFFFF;
-	sum += (iph->saddr) & 0xFFFF;
-	fprintf(log, "did the ANDING\n");
-	fflush(log);
-	
+	sum += (iph->saddr>>16) & 0xffff; // these are fields in the pseudoheader 
+	sum += (iph->saddr) & 0xffff;   //
 	//dest ip 
-
-	sum += (iph->daddr >> 16) & 0xFFFF;	
-	sum += (iph->daddr) & 0xFFFF;
-	fprintf(log, "did ANDING of daddr\n");
-	fflush(log);
-	
+	sum += (iph->daddr >> 16) & 0xffff;	
+	sum += (iph->daddr) & 0xffff;
 	//protocol and reserved 6
-	
 	sum += htons(IPPROTO_TCP);
-	fprintf(log, "stored protocol detals\n");
-	fflush(log);
-	
 	//length
 	sum += htons(tcp_len);
-	fprintf(log, "put in length details\n");
-	fflush(log);
-	
 	// add the IP payload 
-	
-	tcph->check = 0; 
-	fprintf(log, "put tcp check = 0\n");
-	fflush(log);
-	int prev = tcp_len;	
-	while (tcp_len > 0){
-		fprintf(log, "tcp length is > 0\n");
-		fflush(log);
-	
+
+	while (tcp_len > 1){
+
 		sum += *ip_payload++;
-		prev = tcp_len;
 		tcp_len -= 2;
-		if (tcp_len > prev){
-			if (tcp_len == 1){
-				sum += *ip_payload++;
-			}
-			break;
-		}
-		fprintf(log, "adding to sum tcp len = %d\n",tcp_len);
-		fflush(log);
-	
-
-	}
-	fprintf(log, "added value of payload\n");
-	fflush(log);
-	
-	// if any bytes left, pad bytes and add 
-
-	if (tcp_len > 0){
-
-		sum += ( (*ip_payload) &htons(0xFF00));
-		fprintf(log, " addded payload after and\n");
-	fflush(log);
-	
 	}
 
+
+	// if bytes left, add value of that byte as well
+	if (tcp_len == 1){
+
+		sum +=  *((unsigned char*)(ip_payload));
+	}
+
+	//now adding the carry
 	while (sum >> 16){
 
 		sum = (sum & 0xffff) + (sum >> 16);
-		fprintf(log, "added sum\n");
-	fflush(log);
-	
 	}
 
 	sum = ~sum;
@@ -155,6 +109,69 @@ void compute_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	fflush(log);
 }	
 
+
+void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
+
+	fprintf(log, "entering udp checksum\n");
+	fflush(log);
+	register unsigned long sum = 0;
+	fprintf(log,"\nip total len:%d",ntohs(iph->tot_len));
+	fflush(log);
+	fprintf(log,"\n ip hdr length:%d",(iph->ihl << 2));
+	fflush(stdout); 
+	unsigned short udp_len = ntohs(iph->tot_len) - (iph->ihl << 2); //length of whole packet - ip header 
+	fprintf(log, "got udp length it is :%d\n",udp_len);
+	fflush(log);
+
+	struct udphdr *udph = (struct udphdr*) ip_payload; // now extract just the tcp header portion 
+	fprintf(log, "got payload\n");
+	fflush(log);
+
+
+	udph->check = 0; 
+	//add pseudohdr
+	//the source ip 
+
+	sum += (iph->saddr>>16) & 0xffff; // these are fields in the pseudoheader 
+	sum += (iph->saddr) & 0xffff;   //
+	//dest ip 
+	sum += (iph->daddr >> 16) & 0xffff;	
+	sum += (iph->daddr) & 0xffff;
+	//protocol and reserved 6
+	sum += htons(IPPROTO_UDP);
+	//length
+	sum += htons(udp_len);
+	// add the IP payload 
+
+	while (udp_len > 1){
+
+		sum += *ip_payload++;
+		udp_len -= 2;
+	}
+
+
+	// if bytes left, add value of that byte as well
+	if (udp_len == 1){
+
+		sum +=  *((unsigned char*)(ip_payload));
+	}
+
+	//now adding the carry
+	while (sum >> 16){
+
+		sum = (sum & 0xffff) + (sum >> 16);
+	}
+
+	sum = ~sum;
+	if ((unsigned short) sum == 0x0000){
+		sum = 0xffff;
+	}
+	udph->check = (unsigned short) sum;
+	fprintf(log, "Leaving udp checksum\n");
+	fflush(log);
+
+
+}
 /* returns packet id */
 static u_int32_t xor_pkt (struct nfq_data *tb)
 {
@@ -189,14 +206,14 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 		struct iphdr *iph = (struct iphdr*) data; //typecast  to iphdr 
 		struct tcphdr *tcph;
 		struct udphdr *udph;
-		
+
 		int iphdr_len = iph->ihl << 2; //get the total len of iphdr 
 		unsigned char *ch;
 		int offset; 
 
 		unsigned short ip_checksum = iph->check;
 		fprintf(log,"\n IP checksum : %04x\n",ip_checksum);
-		compute_ip_checksum(iph);
+		calculate_ip_checksum(iph);
 		fflush(log);
 		fprintf(log,"calculated ip checksum: %04x\n",iph->check);
 		fflush(log);
@@ -208,59 +225,88 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 			exit(0);
 		}
 		unsigned char *payload_data;
-		
+
 		switch(iph->protocol){
 
 			case ICMP: offset = iphdr_len +  sizeof(struct icmphdr); 
 				   break;
 
-			case UDP: offset =  iphdr_len + sizeof(struct udphdr);
-				  break;
+			case IPPROTO_UDP: fprintf(log,"\nNow in UDP section\n");
+					  fflush(log);
+					  udph = (struct udphdr*) (data + (iph->ihl*4));
+					  unsigned udp_checksum = udph->check; 
+					  fprintf(log,"UDP checksum is %04x\n",udph->check);
+					  fflush(log);
+
+					  if(udph->check != udp_checksum){
+						  fprintf(log, "udp checksum calculation is wrong\n");
+						  fflush(log);
+						  exit(1);
+					  }
+
+					  offset =  iphdr_len + sizeof(struct udphdr);
+					  xor_data(ret, offset, data);
+					  calculate_udp_checksum(iph,(unsigned short*)udph);
+					  fprintf(log,"\nRecalculatng udp checksum\n");
+					  fflush(log);
+
+					  fprintf(log,"recalculated udp checksum: %04x\n",udph->check);	
+					  fflush(log);
+
+
+					  break;
 
 			case IPPROTO_TCP:
-				  fprintf(log,"\nOkay now in tcp SECTION\n");
-				  fflush(log); 
-				  tcph = (struct tcphdr*) (data + (iph->ihl << 2)); // CHANGE ThiS 
-				  
-				  unsigned tcp_checksum = tcph->check;
-				  fprintf(log, "Tcp checksum is %04x\n",tcph->check);
-				  fflush(log);
-				  compute_tcp_checksum(iph,(unsigned short*)tcph);
-				   fprintf(log, "Calculated Tcp checksum is %04x\n",tcph->check);
-				  fflush(log);
-				 
-				  if(tcph->check != tcp_checksum){
-						fprintf(log, "tcp checksum calculation is wrong\n");
-						fflush(log);
-						exit(1);
-					}
-				  offset = iphdr_len + sizeof(struct tcphdr);
-				  break;
+					  fprintf(log,"\nOkay now in tcp SECTION\n");
+					  fflush(log); 
+					  tcph = (struct tcphdr*) (data + (iph->ihl * 4)); // CHANGE ThiS 
+
+					  unsigned tcp_checksum = tcph->check;
+					  fprintf(log, "Tcp checksum is %04x\n",tcph->check);
+					  fflush(log);
+					  calculate_tcp_checksum(iph,(unsigned short*)tcph);
+					  fprintf(log, "Calculated Tcp checksum is %04x\n",tcph->check);
+					  fflush(log);
+
+					  if(tcph->check != tcp_checksum){
+						  fprintf(log, "tcp checksum calculation is wrong\n");
+						  fflush(log);
+						  exit(1);
+					  }
+					  offset = iphdr_len + sizeof(struct tcphdr);
+					  xor_data(ret, offset, data);
+					  calculate_tcp_checksum(iph,(unsigned short*)tcph);
+					  fprintf(log,"\nRecalculatng tcp checksum\n");
+					  fflush(log);
+
+					  fprintf(log,"recalculated tcp checksum: %04x\n",tcph->check);	
+					  fflush(log);
+					  break;
 
 		}
 
-		int payload_len = ret - offset;
-		ch = data + offset;
-		int i;
-		for(i = 0; i < payload_len; i++) {
-			*ch = *ch ^ KEY; 
-			ch++;
-		}
 
-		fprintf(log,"\nRecalculatng tcp checksum\n");
-		fflush(log);
-	 	compute_tcp_checksum(iph,(unsigned short*)tcph);
-		
-		fprintf(log,"recalculated tcp checksum: %04x\n",tcph->check);	
 		fprintf(log,"\nRecalculating IP checksum\n");
 		fflush(log);
-		compute_ip_checksum(iph);
+		calculate_ip_checksum(iph);
 		fprintf(log,"recalculated ip checksum: %04x\n",iph->check);	
 		fflush(log);		
 	}
 	return id;
 }
 
+void xor_data(int total_length, int offset, unsigned char* data){
+
+	int payload_len = total_length - offset;
+	unsigned char *ch = data + offset;
+	int i;
+	for(i = 0; i < payload_len; i++) {
+		*ch = *ch ^ KEY; 
+		ch++;
+	}
+
+
+}
 void print_ip(struct nfq_data *tb){
 
 	unsigned char *data;	
