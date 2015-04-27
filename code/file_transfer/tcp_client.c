@@ -35,7 +35,7 @@ int main(int argc, char *argv[]){
 
 
     if(argc<3){
-                printf("\nUsage: <ncp> <source file name> <destination file name> <destination IP address>\n");
+                printf("\nUsage: <tcp_client> <source file name> <destination file name> <destination IP address>\n");
         }
 
 

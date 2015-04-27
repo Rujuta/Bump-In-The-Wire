@@ -77,7 +77,7 @@ int main(int argc, char *argv[]){
 	int no_of_packets_to_read;
 
 	if(argc<4){
-		printf("\nUsage: <ncp> <loss %> <source file name> <destination file@destination_host>\n");
+		printf("\nUsage: <ncp> <source file name> <destinationfile name> <destination_hostIP>\n");
 	}
 	sr=socket(AF_INET, SOCK_DGRAM, 0); 
 	if (sr<0){
