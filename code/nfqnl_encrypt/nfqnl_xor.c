@@ -119,11 +119,9 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	fflush(log);
 	fprintf(log,"\n ip hdr length:%d",(iph->ihl << 2));
 	fflush(stdout); 
-	unsigned short udp_len = ntohs(iph->tot_len) - (iph->ihl << 2); //length of whole packet - ip header 
-	fprintf(log, "got udp length it is :%d\n",udp_len);
-	fflush(log);
 
 	struct udphdr *udph = (struct udphdr*) ip_payload; // now extract just the tcp header portion 
+	int udp_len = htons(udph->len);
 	fprintf(log, "got payload\n");
 	fflush(log);
 
@@ -140,13 +138,17 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	//protocol and reserved 6
 	sum += htons(IPPROTO_UDP);
 	//length
-	sum += htons(udp_len);
+	sum += udph->len;
 	// add the IP payload 
-
+	udph->check = 0; 
+	fprintf(log, "\nUDP length is %d\n", udp_len);
+	fflush(log);
 	while (udp_len > 1){
 
 		sum += *ip_payload++;
 		udp_len -= 2;
+		//fprintf(log, "udp length:%d\n",udp_len);
+		//fflush(log);
 	}
 
 
@@ -164,10 +166,12 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 	sum = ~sum;
 	if ((unsigned short) sum == 0x0000){
+		fprintf(log, "\nsum is 0\n");
+		fflush(log);
 		sum = 0xffff;
 	}
 	udph->check = (unsigned short) sum;
-	fprintf(log, "Leaving udp checksum\n");
+	fprintf(log, "\nLeaving udp checksum\n");
 	fflush(log);
 
 
