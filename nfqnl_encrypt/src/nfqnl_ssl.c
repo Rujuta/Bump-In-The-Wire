@@ -489,6 +489,10 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 	/* Encrypt the plaintext */
 	ciphertext_len = encrypt_calc_checksum(nfa, key, iv, ciphertext);	
+	
+	/* Clean up */
+	EVP_cleanup();
+	ERR_free_strings();	
 
 	if (ciphertext_len < 0) {
 		printf(stderr,"\n ENCRYPTION FAILED \n");
@@ -670,6 +674,10 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 	/* Encrypt the plaintext */
 	ciphertext_len = decrypt_calc_checksum(nfa, key, iv, ciphertext);	
+	
+	/* Clean up */
+	EVP_cleanup();
+	ERR_free_strings();	
 
 	if(DEBUG) {
 		print_ip(nfa);
