@@ -421,7 +421,7 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
 		case IPPROTO_TCP:
 				  fprintf(log,"\nOkay now in tcp SECTION\n");
 				  fflush(log); 
-				  tcph = (struct tcphdr*) (paylooad + iphder_len); // CHANGE ThiS 
+				  tcph = (struct tcphdr*) (payload + iphdr_len); // CHANGE ThiS 
 
 				  unsigned tcp_checksum = tcph->check;
 				  fprintf(log, "Tcp checksum is %04x\n",tcph->check);
@@ -604,7 +604,7 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
 		case IPPROTO_TCP:
 				  fprintf(log,"\nOkay now in tcp SECTION\n");
 				  fflush(log); 
-				  tcph = (struct tcphdr*) (paylooad + iphder_len); // CHANGE ThiS 
+				  tcph = (struct tcphdr*) (payload + iphdr_len); // CHANGE ThiS 
 
 				  unsigned tcp_checksum = tcph->check;
 				  fprintf(log, "Tcp checksum is %04x\n",tcph->check);

@@ -38,8 +38,8 @@ include $(INCLUDE_DIR)/package.mk
 define Package/nfqnl_encrypt
 	SECTION:=utils
 	CATEGORY:=Utilities
-	TITLE:=test of using netfilter
-	DEPENDS:= +libc +libnfnetlink +libnetfilter-queue
+	TITLE:=encrypt packets using netfilter and openssl
+	DEPENDS:= +libc +libnfnetlink +libnetfilter-queue +libopenssl +libcrypto +libssl
 endef
 
 
