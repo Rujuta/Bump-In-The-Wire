@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include <string.h>
 
 #define DEBUG 1
 #define TCP 6
@@ -28,7 +29,7 @@ FILE *log;
 
 
 
-void calculate_ip_checksum(struct iphdr* iph){
+void calculate_ip_checksum(struct iphdr* iph) {
 
 	fprintf(log, "entered compute ip checksum\n");
 	fflush(log);
@@ -181,13 +182,23 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 
 }
+
+void xor_data(int total_length, int offset, unsigned char* data){
+
+	int payload_len = total_length - offset;
+	unsigned char *ch = data + offset;
+	int i;
+	for(i = 0; i < payload_len; i++) {
+		*ch = *ch ^ KEY; 
+		ch++;
+	}
+}
+
 /* returns packet id */
 static u_int32_t xor_pkt (struct nfq_data *tb)
 {
 	int id = 0;
 	struct nfqnl_msg_packet_hdr *ph;
-	struct nfqnl_msg_packet_hw *hwph;
-	u_int32_t mark,ifi; 
 	int ret;
 	unsigned char *data;
 
@@ -195,20 +206,6 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 	if (ph) {
 		id = ntohl(ph->packet_id);
 	}
-
-	hwph = nfq_get_packet_hw(tb);
-	if (hwph) {
-		int i, hlen = ntohs(hwph->hw_addrlen);
-	}
-
-	mark = nfq_get_nfmark(tb);
-
-	ifi = nfq_get_indev(tb);
-
-	ifi = nfq_get_outdev(tb);
-	ifi = nfq_get_physindev(tb);
-
-	ifi = nfq_get_physoutdev(tb);
 
 	ret = nfq_get_payload(tb, &data);
 	if (ret >= 0) {
@@ -239,7 +236,6 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 
 			case ICMP: offset = iphdr_len +  sizeof(struct icmphdr); 
 				   break;
-
 			case IPPROTO_UDP: fprintf(log,"\nNow in UDP section\n");
 					  fflush(log);
 					  udph = (struct udphdr*) (data + (iph->ihl*4));
@@ -255,16 +251,13 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 
 					  offset =  iphdr_len + sizeof(struct udphdr);
 					  xor_data(ret, offset, data);
-					  calculate_udp_checksum(iph,(unsigned short*)udph);
+
 					  fprintf(log,"\nRecalculatng udp checksum\n");
 					  fflush(log);
-
+					  calculate_udp_checksum(iph,(unsigned short*)udph);
 					  fprintf(log,"recalculated udp checksum: %04x\n",udph->check);	
 					  fflush(log);
-
-
 					  break;
-
 			case IPPROTO_TCP:
 					  fprintf(log,"\nOkay now in tcp SECTION\n");
 					  fflush(log); 
@@ -282,8 +275,10 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 						  fflush(log);
 						  exit(1);
 					  }
+
 					  offset = iphdr_len + sizeof(struct tcphdr);
 					  xor_data(ret, offset, data);
+
 					  calculate_tcp_checksum(iph,(unsigned short*)tcph);
 					  fprintf(log,"\nRecalculatng tcp checksum\n");
 					  fflush(log);
@@ -304,18 +299,6 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 	return id;
 }
 
-void xor_data(int total_length, int offset, unsigned char* data){
-
-	int payload_len = total_length - offset;
-	unsigned char *ch = data + offset;
-	int i;
-	for(i = 0; i < payload_len; i++) {
-		*ch = *ch ^ KEY; 
-		ch++;
-	}
-
-
-}
 void print_ip(struct nfq_data *tb){
 
 	unsigned char *data;	
@@ -438,8 +421,6 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		struct nfq_data *nfa, void *data)
 {
 	u_int32_t id;
-	printf("\nEntered call back\n");
-	fflush(log);
 	if (DEBUG) {
 		fprintf(log,"entering encrypt callback\n");
 		fflush(log);
@@ -454,10 +435,10 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		print_ip(nfa);
 		print_pkt(nfa);
 	}
-	char *payload;
+	unsigned char *payload;
 	int len = nfq_get_payload(nfa, &payload);
 	if (DEBUG)
-		printf(log,"\nDone with Call back\n");
+		fprintf(log,"\nDone with Call back\n");
 	return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
 }
 
@@ -479,7 +460,7 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		print_ip(nfa);
 		print_pkt(nfa);
 	}
-	char *payload;
+	unsigned char *payload;
 	int len = nfq_get_payload(nfa, &payload);
 	if (DEBUG){
 		fprintf(log,"\nDone with Call back\n");
@@ -489,7 +470,6 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 }
 
 void unbind_queue(struct nfq_handle *h){
-
 	printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
 	if (nfq_unbind_pf(h, AF_INET) < 0) {
 		fprintf(stderr, "error during nfq_unbind_pf()\n");
@@ -497,28 +477,25 @@ void unbind_queue(struct nfq_handle *h){
 	}
 	printf("\n Done unbinding\n");
 	fflush(stdout);
-
-
 }
 
-struct nfq_handle* open_queue(struct nfq_handle *h){
+struct nfq_handle* open_queue(){
 
-	h  = nfq_open();
+	struct nfq_handle *h  = nfq_open();
 	if (!h) {
-		fprintf(stderr, "error during nfq_open() for h_in\n");
+		fprintf(stderr, "error during nfq_open()\n");
 		exit(1);
 	}
 	return h; 
-	
 }
-struct nfq_q_handle* bind_queue(struct nfq_q_handle *qh,struct nfq_handle *h, int queue_num, nfq_callback *cb){
+struct nfq_q_handle* bind_queue(struct nfq_handle *h, int queue_num, nfq_callback *cb){
 	
 	printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
 	if (nfq_bind_pf(h, AF_INET) < 0) {
 		fprintf(stderr, "error during nfq_bind_pf()\n");
 		exit(1);
 	}
-
+    struct nfq_q_handle *qh;
 	printf("binding this socket to queue equals %d\n",queue_num);
 	qh = nfq_create_queue(h,  queue_num, cb, NULL);
 	if (!qh) {
@@ -543,7 +520,6 @@ int main(int argc, char **argv)
 {
 	struct nfq_handle *h_in_lan, *h_in_wan; 
 	struct nfq_q_handle *qh_in_lan, *qh_in_wan;
-	struct nfnl_handle *nh;
 	int fd_in_lan, fd_in_wan; 
 	int rv;
 	char buf_in_lan[4096] __attribute__ ((aligned));
@@ -559,18 +535,19 @@ int main(int argc, char **argv)
 	}
 	printf("opening library handle for both incoming and outgoing queues\n");
 
-	h_in_lan = open_queue(h_in_lan);
-	h_in_wan = open_queue(h_in_wan);
+	h_in_lan = open_queue();
+	h_in_wan = open_queue();
 	unbind_queue(h_in_lan);
 	unbind_queue(h_in_wan);
-	qh_in_lan = bind_queue(qh_in_lan, h_in_lan, 0, &cb_encrypt);
-	qh_in_wan = bind_queue(qh_in_wan,h_in_wan,1, &cb_decrypt);
+	qh_in_lan = bind_queue(h_in_lan, 0, &cb_encrypt);
+	qh_in_wan = bind_queue(h_in_wan,1, &cb_decrypt);
 	set_packet_copy_mode(qh_in_lan);
 	set_packet_copy_mode(qh_in_wan);
 
 
 	fd_in_lan= nfq_fd(h_in_lan);
 	fd_in_wan= nfq_fd(h_in_wan);
+
 	int max_sd;
 	if (fd_in_lan > fd_in_wan)
 		max_sd = fd_in_lan;
@@ -582,22 +559,23 @@ int main(int argc, char **argv)
         temp_mask = read_sd;		
 		num = select(max_sd+1, &temp_mask, &dummy_mask, &dummy_mask, NULL);
 		if (num > 0 ){
-
 			if (FD_ISSET(fd_in_lan, &temp_mask)){
-				
 				if (DEBUG){
 					fprintf(log,"pkt received from LAN\n");
 					fflush(log);
 				}
 				rv = recv(fd_in_lan, buf_in_lan, sizeof(buf_in_lan),0);
-				if (rv < 0)
+				if (rv < 0) {
 					printf("\nSome error in receive\n");
+                    /* Call some sort of "clean up and exit" fxn. Or Maybe use a goto?*/                
+                }
 				fprintf(log,"Going to handle packet now");
 				fflush(log);
 				nfq_handle_packet(h_in_lan, buf_in_lan, rv);
 
 			}	
-			if (FD_ISSET(fd_in_wan,&temp_mask)){
+            /* Changed from "else if," is this necessary? */
+			if (FD_ISSET(fd_in_wan,&temp_mask)) {
 				if (DEBUG){
 					fprintf(log,"\n Packet received from WAN\n");
 					fflush(log);

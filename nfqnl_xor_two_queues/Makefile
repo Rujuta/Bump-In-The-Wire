@@ -39,7 +39,7 @@ define Package/nfqnl_xor_two_queues
 	SECTION:=utils
 	CATEGORY:=Utilities
 	TITLE:=encrypt packets using netfilter and openssl
-	DEPENDS:= +libc +libnfnetlink +libnetfilter-queue +libopenssl +libcrypto +libssl
+	DEPENDS:= +libc +libnfnetlink +libnetfilter-queue
 endef
 
 
