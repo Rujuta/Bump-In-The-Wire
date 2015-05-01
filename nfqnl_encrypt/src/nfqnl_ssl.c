@@ -186,12 +186,13 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 }
 
 
-void print_ip(struct nfq_data *tb){
+void print_ip(struct nfq_data *tb, unsigned char * payload){
 
-	unsigned char *data;	
-	int ret = nfq_get_payload(tb, &data);
-
-	struct iphdr *iph = (struct iphdr*) data; //typecast  to iphdr 
+	if (payload == NULL) {
+      nfq_get_payload(tb, &payload);
+    }
+    
+	struct iphdr *iph = (struct iphdr*) payload; //typecast  to iphdr 
 	int iphdr_len = iph->ihl*4; //get the total len of iphdr 
 
 	memset(&source, 0, sizeof(source));
@@ -216,14 +217,12 @@ void print_ip(struct nfq_data *tb){
 }
 
 /* returns packet id */
-static u_int32_t print_pkt (struct nfq_data *tb)
+static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int payload_len)
 {
 	int id = 0;
 	struct nfqnl_msg_packet_hdr *ph;
 	struct nfqnl_msg_packet_hw *hwph;
 	u_int32_t mark,ifi; 
-	int ret;
-	unsigned char *data;
 
 	ph = nfq_get_msg_packet_hdr(tb);
 	if (ph) {
@@ -266,31 +265,21 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 		fprintf(log,"physoutdev=%u ", ifi);
 
 	fflush(log);
-	ret = nfq_get_payload(tb, &data);
-	if (ret >= 0) {
-		fprintf(log,"payload_len=%d ", ret);
-		unsigned char *ch = data;
+    if (payload == NULL) {
+      payload_len = nfq_get_payload(tb, &payload);
+    }
+	if (payload_len >= 0) {
+		fprintf(log,"payload_len=%d ", payload_len);
+		unsigned char *ch = payload;
 		int gap;
 		int i;
-		for(i = 0; i < ret; i++) {
-
-
+        fprintf(log,"\n");
+		for(i = 0; i < payload_len; i++) {
 			fprintf(log,"%02x ", *((unsigned int*)ch) & 0xFF);
 			ch++;
 			/* print extra space after 8th byte for visual aid */
-			if (i == 7)
-				fprintf(log," ");
-		}
-		/* print space to handle line less than 8 bytes */
-		if (ret < 8)
-			fprintf(log," ");
-
-		/* fill hex gap with spaces if not full line */
-		if (ret < 16) {
-			gap = 16 - ret;
-			for (i = 0; i < gap; i++) {
-				fprintf(log,"   ");
-			}
+			if ((i+1)%4 == 0)
+				fprintf(log,"\n");
 		}
 
 		fflush(log);
@@ -414,8 +403,10 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                   if (ciphertext_len >= 0) {
                     /* Set new length in IP header */
                     memcpy(buffer, payload, offset);
+                    iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                    udph = (struct udphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     iph->tot_len = htons(ciphertext_len+offset);
-                    calculate_udp_checksum(iph,(unsigned short*)(payload+iphdr_len));
+                    calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
                   fprintf(log,"\nRecalculatng udp checksum\n");
                   fflush(log);
@@ -445,10 +436,13 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                   ciphertext = buffer+offset;
                   ciphertext_len = encrypt_data(payload+offset, payload_len-offset,key, iv,ciphertext);
                   if (ciphertext_len >= 0) {
+                    fprintf(log, "\nciphertext_len in hex is %04x\n", (unsigned short)ciphertext_len);
                     memcpy(buffer, payload, offset);
+                    iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                    tcph = (struct tcphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     /* Set new length in IP header */
                     iph->tot_len = htons(ciphertext_len+offset);
-                    calculate_tcp_checksum(iph,(unsigned short*)(payload+iphdr_len));
+                    calculate_tcp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
                   fprintf(log,"\nRecalculatng tcp checksum\n");
                   fflush(log);
@@ -468,13 +462,13 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
 static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		struct nfq_data *nfa, void *data)
 {
-	u_int32_t id;
+	u_int32_t id = get_packet_id(nfa);
 	if (DEBUG) {
 		fprintf(log,"entering encrypt callback\n");
+        fprintf(log,"\n Printing packet before encrypt\n");
 		fflush(log);
-		id = print_pkt(nfa);
-		print_ip(nfa);
-		fprintf(log,"\n Printing packet After XOR\n");
+        print_ip(nfa, NULL);
+		print_pkt(nfa, NULL, 0);
 		fflush(log);
 
 	}
@@ -511,8 +505,8 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     
     if(DEBUG) {
         fprintf(log,"\n Printing packet after encrypt\n");
-        print_ip(nfa);
-        print_pkt(nfa);
+        print_ip(nfa, final_payload);
+        print_pkt(nfa, final_payload, newpayload_len);
         fprintf(log,"\nDone with Call back\n");
         fflush(log);
     }
@@ -614,9 +608,11 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                   plaintext_len = decrypt_data(payload+offset, payload_len-offset,key, iv,plaintext);
                   if (plaintext_len >= 0) {
                     memcpy(buffer, payload, offset);
+                    iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                    udph = (struct udphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     /* Set new length in IP header */
                     iph->tot_len = htons(plaintext_len+offset);
-                    calculate_udp_checksum(iph,(unsigned short*)(payload+iphdr_len));
+                    calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
                   fprintf(log,"\nRecalculatng udp checksum\n");
                   fflush(log);
@@ -647,9 +643,12 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                   plaintext_len = decrypt_data(payload+offset, payload_len-offset,key, iv,plaintext);
                   if (plaintext_len >= 0) {
                     memcpy(buffer,payload, offset);
+                    iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                    tcph = (struct tcphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     /* Set new length in IP header */
+                    fprintf(log, "\nplaintext_len in hex is %04x\n", (unsigned short)plaintext_len);
                     iph->tot_len = htons(plaintext_len+offset);
-                    calculate_tcp_checksum(iph,(unsigned short*)(payload+iphdr_len));
+                    calculate_tcp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
                   fprintf(log,"\nRecalculatng tcp checksum\n");
                   fflush(log);
@@ -672,8 +671,8 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         fprintf(log,"entering decrypt callback\n");
         fprintf(log,"\n Printing packet Before Decryption\n");
         fflush(log);
-        print_pkt(nfa);
-        print_ip(nfa);
+        print_ip(nfa, NULL);
+        print_pkt(nfa, NULL, 0);
     }
     
     int newpayload_len = 4096;
@@ -714,9 +713,9 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     }
     
     if(DEBUG) {
-        fprintf(log,"\n Printing packet after encrypt\n");
-        print_ip(nfa);
-        print_pkt(nfa);
+        fprintf(log,"\n Printing packet after decrypt\n");
+        print_ip(nfa, final_payload);
+        print_pkt(nfa, final_payload, newpayload_len);
         fprintf(log,"\nDone with Call back\n");
         fflush(log);
     }
