@@ -10,6 +10,7 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include<netinet/udp.h>
 #include<netinet/tcp.h>
+#include <string.h>
 
 #define DEBUG 1
 #define TCP 6
@@ -176,6 +177,18 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 
 }
+
+void xor_data(int total_length, int offset, unsigned char* data){
+
+	int payload_len = total_length - offset;
+	unsigned char *ch = data + offset;
+	int i;
+	for(i = 0; i < payload_len; i++) {
+		*ch = *ch ^ KEY; 
+		ch++;
+	}
+}
+
 /* returns packet id */
 static u_int32_t xor_pkt (struct nfq_data *tb)
 {
@@ -299,18 +312,7 @@ static u_int32_t xor_pkt (struct nfq_data *tb)
 	return id;
 }
 
-void xor_data(int total_length, int offset, unsigned char* data){
 
-	int payload_len = total_length - offset;
-	unsigned char *ch = data + offset;
-	int i;
-	for(i = 0; i < payload_len; i++) {
-		*ch = *ch ^ KEY; 
-		ch++;
-	}
-
-
-}
 void print_ip(struct nfq_data *tb){
 
 	unsigned char *data;	
@@ -437,7 +439,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		fprintf(log,"entering callback\n");
 		id = print_pkt(nfa);
 		print_ip(nfa);
-		printf(log,"\n Printing packet After XOR\n");
+		fprintf(log,"\n Printing packet After XOR\n");
 		fflush(log);
 
 	}
@@ -449,7 +451,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	char *payload;
 	int len = nfq_get_payload(nfa, &payload);
 	if (DEBUG)
-		printf(log,"\nDone with Call back\n");
+		fprintf(log,"\nDone with Call back\n");
 	return nfq_set_verdict(qh, id, NF_ACCEPT, len, payload);
 }
 
