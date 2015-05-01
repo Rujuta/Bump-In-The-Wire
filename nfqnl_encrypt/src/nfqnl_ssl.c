@@ -20,7 +20,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #define TCP 6
 #define ICMP 1
 #define UDP 17
@@ -405,6 +405,7 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
 
         case ICMP: offset = iphdr_len +  sizeof(struct icmphdr);
                    ciphertext_len = payload_len-offset;
+                   return -1;
                break;
 
         case IPPROTO_UDP: 
@@ -538,8 +539,10 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     ERR_free_strings();
     
     if (newpayload_len < 0) {
-        fprintf(log,"\n ENCRYPTION FAILED \n");
-        fflush(log);
+        if (DEBUG) {
+          fprintf(log,"\n ENCRYPTION FAILED \n");
+          fflush(log);
+        }
         newpayload_len = nfq_get_payload(nfa,&final_payload);
     }
     
@@ -631,6 +634,7 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
 
         case ICMP: offset = iphdr_len +  sizeof(struct icmphdr);
                    plaintext_len = payload_len-offset;
+                   return -1;
                break;
 
         case IPPROTO_UDP: 
@@ -767,8 +771,11 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     ERR_free_strings(); 
 
     if (newpayload_len < 0) {
-        fprintf(log,"\n DECRYPTION FAILED \n");
-        newpayload_len = nfq_get_payload(nfa,&final_payload);
+      if (DEBUG) {
+          fprintf(log,"\n DECRYPTION FAILED \n");
+          fflush(log);
+      }
+      newpayload_len = nfq_get_payload(nfa,&final_payload);
     }
     
     if(DEBUG) {
