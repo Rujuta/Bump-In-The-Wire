@@ -8,8 +8,8 @@
 #include <netinet/ip_icmp.h>
 #include <errno.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
-#include<netinet/udp.h>
-#include<netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/types.h>
@@ -30,7 +30,6 @@ FILE *log;
 
 
 void calculate_ip_checksum(struct iphdr* iph) {
-
 	fprintf(log, "entered compute ip checksum\n");
 	fflush(log);
 	iph->check = 0;
@@ -512,9 +511,6 @@ void set_packet_copy_mode(struct nfq_q_handle *qh){
 		fprintf(stderr, "can't set packet_copy mode\n");
 		exit(1);
 	}
-
-
-
 }
 int main(int argc, char **argv)
 {
@@ -527,6 +523,7 @@ int main(int argc, char **argv)
 	fd_set read_sd; // read set of descriptors
     fd_set temp_mask, dummy_mask; 
 	FD_ZERO(&read_sd);
+    FD_ZERO(&dummy_mask);
 	//add both descriptors to the set
 	log = fopen("log.txt","w");
 	if (log == NULL){
@@ -536,16 +533,15 @@ int main(int argc, char **argv)
 	printf("opening library handle for both incoming and outgoing queues\n");
 
 	h_in_lan = open_queue();
-	h_in_wan = open_queue();
 	unbind_queue(h_in_lan);
-	unbind_queue(h_in_wan);
 	qh_in_lan = bind_queue(h_in_lan, 0, &cb_encrypt);
-	qh_in_wan = bind_queue(h_in_wan,1, &cb_decrypt);
-	set_packet_copy_mode(qh_in_lan);
-	set_packet_copy_mode(qh_in_wan);
-
-
+    set_packet_copy_mode(qh_in_lan);
 	fd_in_lan= nfq_fd(h_in_lan);
+
+	h_in_wan = open_queue();
+	unbind_queue(h_in_wan);
+	qh_in_wan = bind_queue(h_in_wan,1, &cb_decrypt);
+	set_packet_copy_mode(qh_in_wan);
 	fd_in_wan= nfq_fd(h_in_wan);
 
 	int max_sd;
@@ -554,6 +550,8 @@ int main(int argc, char **argv)
 	else
 		max_sd = fd_in_wan;
 		
+    FD_SET(fd_in_lan,&read_sd);
+    FD_SET(fd_in_wan,&read_sd);
 	int num; 	
 	while(1){
         temp_mask = read_sd;		
