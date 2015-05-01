@@ -403,9 +403,16 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
     
     switch(iph->protocol){
 
-        case ICMP: offset = iphdr_len +  sizeof(struct icmphdr);
-                   ciphertext_len = payload_len-offset;
-                   return -1;
+        case ICMP: 
+                  offset = iphdr_len +  sizeof(struct icmphdr);
+                  ciphertext = buffer+offset;
+                  ciphertext_len = encrypt_data(payload+offset, payload_len-offset,key, iv,ciphertext);
+                  if (ciphertext_len >= 0) {
+                     /* Set new length in IP header */
+                     memcpy(buffer, payload, offset);
+                     iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                     iph->tot_len = htons(ciphertext_len+offset);
+                  }
                break;
 
         case IPPROTO_UDP: 
@@ -526,17 +533,10 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     /* A 128 bit IV */
     unsigned char *iv = "01234567890123456";
 
-    /* Initialise the library */
-    ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
-    OPENSSL_config(NULL);
 
     /* Encrypt the plaintext */
     newpayload_len = encrypt_calc_checksum(nfa, key, iv, newpayload);   
     
-    /* Clean up */
-    EVP_cleanup();
-    ERR_free_strings();
     
     if (newpayload_len < 0) {
         if (DEBUG) {
@@ -632,9 +632,16 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
     
     switch(iph->protocol){
 
-        case ICMP: offset = iphdr_len +  sizeof(struct icmphdr);
-                   plaintext_len = payload_len-offset;
-                   return -1;
+        case ICMP: 
+                  offset = iphdr_len +  sizeof(struct icmphdr);
+                  plaintext = buffer+offset;
+                  plaintext_len = decrypt_data(payload+offset, payload_len-offset,key, iv,plaintext);
+                  if (plaintext_len >= 0) {
+                    memcpy(buffer, payload, offset);
+                    iph = (struct iphdr*) buffer; //typecast  to iphdr 
+                    /* Set new length in IP header */
+                    iph->tot_len = htons(plaintext_len+offset);
+                  }
                break;
 
         case IPPROTO_UDP: 
@@ -758,17 +765,9 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
      */
 
 
-    /* Initialise the library */
-    ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
-    OPENSSL_config(NULL);
-
     /* Encrypt the plaintext */
     newpayload_len = decrypt_calc_checksum(nfa, key, iv, newpayload);   
-    
-    /* Clean up */
-    EVP_cleanup();
-    ERR_free_strings(); 
+   
 
     if (newpayload_len < 0) {
       if (DEBUG) {
@@ -878,6 +877,12 @@ int main(int argc, char **argv)
 		
     FD_SET(fd_in_lan,&read_sd);
     FD_SET(fd_in_wan,&read_sd);
+    
+    /* Initialise the library */
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+    OPENSSL_config(NULL);
+    
 	int num; 	
 	while(1){
         temp_mask = read_sd;		
@@ -935,6 +940,10 @@ int main(int argc, char **argv)
       printf("closing library handle\n");
 	nfq_close(h_in_lan);
 	nfq_close(h_in_wan);
+    
+    /* Clean up */
+    EVP_cleanup();
+    ERR_free_strings(); 
 
 	exit(0);
 }
