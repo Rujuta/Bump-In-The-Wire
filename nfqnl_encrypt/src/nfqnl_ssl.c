@@ -841,7 +841,7 @@ int main(int argc, char **argv)
 	struct nfq_handle *h_in_lan, *h_in_wan; 
 	struct nfq_q_handle *qh_in_lan, *qh_in_wan;
 	int fd_in_lan, fd_in_wan; 
-	int rv;
+	int rv_lan, rv_wan;
 	char buf_in_lan[4096] __attribute__ ((aligned));
 	char buf_in_wan[4096];
 	fd_set read_sd; // read set of descriptors
@@ -885,6 +885,8 @@ int main(int argc, char **argv)
     
 	int num; 	
 	while(1){
+        rv_lan = -1;
+        rv_wan = -1;
         temp_mask = read_sd;		
 		num = select(max_sd+1, &temp_mask, &dummy_mask, &dummy_mask, NULL);
 		if (num > 0 ){
@@ -893,16 +895,11 @@ int main(int argc, char **argv)
 					fprintf(log,"pkt received from LAN\n");
 					fflush(log);
 				}
-				rv = recv(fd_in_lan, buf_in_lan, sizeof(buf_in_lan),0);
-				if (rv < 0) {
-					printf("\nSome error in receive\n");
+				rv_lan = recv(fd_in_lan, buf_in_lan, sizeof(buf_in_lan),0);
+				if (rv_lan < 0) {
+					printf("\nSome error in receiving LAN packet\n");
                     /* Call some sort of "clean up and exit" fxn. Or Maybe use a goto?*/                
                 }
-                if (DEBUG) {
-                  fprintf(log,"Going to handle packet now");
-                  fflush(log);
-                }
-				nfq_handle_packet(h_in_lan, buf_in_lan, rv);
 
 			}	
             /* Changed from "else if," is this necessary? */
@@ -911,17 +908,25 @@ int main(int argc, char **argv)
 					fprintf(log,"\n Packet received from WAN\n");
 					fflush(log);
 				}
-				rv = recv(fd_in_wan, buf_in_wan, sizeof(buf_in_wan), 0 );
-				if (rv < 0)
-					printf("\n Some error in receiving packet\n");
-				if (DEBUG) {
-                  fprintf(log,"Going to handle packet now");
-                  fflush(log);
-                }
-				nfq_handle_packet(h_in_wan, buf_in_wan, rv);
+				rv_wan = recv(fd_in_wan, buf_in_wan, sizeof(buf_in_wan), 0 );
+				if (rv_wan < 0)
+					printf("\n Some error in receiving WAN packet\n");
 			}
+			if (rv_lan >= 0) {
+              if (DEBUG) {
+                  fprintf(log,"Going to handle LAN packet now");
+                  fflush(log);
+              }
+              nfq_handle_packet(h_in_lan, buf_in_lan, rv_lan);
+            }
+            if (rv_wan >= 0) {
+              if (DEBUG) {
+                  fprintf(log,"Going to handle WAN packet now");
+                  fflush(log);
+              }
+              nfq_handle_packet(h_in_wan, buf_in_wan, rv_wan);
+            }  
 		}
-
 	}	
     if (DEBUG)
       printf("unbinding from queue 0\n");
