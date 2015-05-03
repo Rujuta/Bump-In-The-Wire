@@ -145,7 +145,7 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	}
 	udph->check = (unsigned short) sum;
 }
-
+/*
 
 void print_ip(struct nfq_data *tb, unsigned char * payload){
 
@@ -169,11 +169,11 @@ void print_ip(struct nfq_data *tb, unsigned char * payload){
 	inet_ntop(AF_INET, &(dest.sin_addr), str, INET_ADDRSTRLEN);
 	fprintf(log,"Destination addr: %s",str);
 
-	/*Print out packet details*/
+	/*Print out packet details
 	fprintf(log,"Protocol: %d\n",(unsigned int)iph->protocol);
 }
 
-/* returns packet id */
+/* returns packet id 
 static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int payload_len)
 {
 	int id = 0;
@@ -229,7 +229,7 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 		for(i = 0; i < payload_len; i++) {
 			fprintf(log,"%02x ", *((unsigned int*)ch) & 0xFF);
 			ch++;
-			/* print extra space after 8th byte for visual aid */
+			/* print extra space after 8th byte for visual aid 
 			if ((i+1)%4 == 0)
 				fprintf(log,"\n");
 		}
@@ -237,6 +237,158 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 	fprintf(log,"\n");
 	//fputc('\n', stdout);
 	return id;
+}
+*/
+int print_ip(struct iphdr *iph){ 
+    int iphdr_len = iph->ihl << 2; //get the total len of iphdr 
+
+    memset(&source, 0, sizeof(source));
+    source.sin_addr.s_addr = iph->saddr;
+
+
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_addr.s_addr = iph->daddr;
+    fprintf(log, "IP Header\n");
+    fprintf(log,"\n Header length:%d",iphdr_len);
+    //print source IP and destination IP
+    char str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(source.sin_addr), str, INET_ADDRSTRLEN);
+    fprintf(log,"Source addr: %s\n",str);
+    inet_ntop(AF_INET, &(dest.sin_addr), str, INET_ADDRSTRLEN);
+    fprintf(log,"Destination addr: %s\n",str);
+
+    /*Print out packet details*/
+    fprintf(log,"Protocol: %d\n",(unsigned int)iph->protocol);
+    return iphdr_len;
+}
+
+int print_tcp_hdr(struct tcphdr *tp) {
+    u_short sport, dport, win, urp, checksum,len;
+    u_int32_t seq, ack;
+
+    sport = ntohs(tp->source);
+    dport = ntohs(tp->dest);
+    seq = ntohl(tp->seq);
+    ack = ntohl(tp->ack_seq);
+    win = ntohs(tp->window);
+    urp = ntohs(tp->urg_ptr);
+    checksum = ntohs(tp->check);
+    len = ntohs(tp->doff);
+    len = ((len >> 4)&0x00FF)<<2;
+
+    fprintf(log, "TCP header:\n");
+    fprintf(log, "source port: %d, ", sport);
+    fprintf(log, "dest port: %d, ", dport);
+    fprintf(log, "seq num: %d, ", seq);
+    fprintf(log, "ack num: %d, ", ack);
+    fprintf(log, "Header size: %d bytes, ", len);
+    fprintf(log, "checksum (hex): %04x\n", checksum);
+    return len;
+}
+
+int print_udp_hdr(struct udphdr *up) {
+    u_short sport, dport,checksum,len;
+
+    sport = ntohs(up->source);
+    dport = ntohs(up->dest);
+    checksum = ntohs(up->check);
+    len = ntohs(up->len);
+
+    fprintf(log, "UDP header:\n");
+    fprintf(log, "source port: %d, ", sport);
+    fprintf(log, "dest port: %d, ", dport);
+    fprintf(log, "Datagram size: %d bytes, ", len);
+    fprintf(log, "checksum (hex): %04x\n", checksum);
+    return sizeof(struct udphdr);
+}
+
+
+int print_icmp_hdr(struct icmphdr *ih) {
+    fprintf(log, "ICMP Header:\n");
+    return sizeof(struct icmphdr);
+}
+
+static void print_pkt_complete(struct nfq_data *tb, unsigned char *payload, int payload_len) {
+    /* Internal info/hw info/device info/etc.*/
+    struct nfqnl_msg_packet_hdr *ph;
+    struct nfqnl_msg_packet_hw *hwph;
+    u_int32_t mark,ifi; 
+
+    ph = nfq_get_msg_packet_hdr(tb);
+    if (ph) {
+        int id = ntohl(ph->packet_id);
+        fprintf(log,"hw_protocol=0x%04x hook=%u id=%u ",
+                ntohs(ph->hw_protocol), ph->hook, id);
+    }
+
+    hwph = nfq_get_packet_hw(tb);
+    if (hwph) {
+        int i, hlen = ntohs(hwph->hw_addrlen);
+
+        fprintf(log,"hw_src_addr=");
+        for (i = 0; i < hlen-1; i++)
+            fprintf(log,"%02x:", hwph->hw_addr[i]);
+        fprintf(log,"%02x ", hwph->hw_addr[hlen-1]);
+    }
+
+    mark = nfq_get_nfmark(tb);
+    if (mark)
+        fprintf(log,"mark=%u ", mark);
+
+    ifi = nfq_get_indev(tb);
+    if (ifi)
+        fprintf(log,"indev=%u ", ifi);
+
+    ifi = nfq_get_outdev(tb);
+    if (ifi)
+        fprintf(log,"outdev=%u ", ifi);
+    ifi = nfq_get_physindev(tb);
+    if (ifi)
+        fprintf(log,"physindev=%u ", ifi);
+
+    ifi = nfq_get_physoutdev(tb);
+    if (ifi)
+        fprintf(log,"physoutdev=%u ", ifi);
+
+    if (payload == NULL) {
+      payload_len = nfq_get_payload(tb, &payload);
+    }
+    
+    unsigned char * payload_ptr = payload;
+    int offset = 0;
+    /*Print IP Header */
+    offset += print_ip((struct iphdr *)payload);
+    payload_ptr += offset;
+    /* Print protocol header.*/
+    switch(((struct iphdr *)payload)->protocol) {
+      case IPPROTO_ICMP:
+        offset += print_icmp_hdr((struct icmphdr *)payload_ptr);
+        break;
+      case IPPROTO_TCP:
+        offset += print_tcp_hdr((struct tcphdr *)payload_ptr);
+        break;
+      case IPPROTO_UDP:
+        offset += print_udp_hdr((struct udphdr *)payload_ptr);
+        break;  
+    }
+    payload_ptr = payload + offset;
+
+    if (payload_len-offset >= 0) {
+        fprintf(log,"payload_len=%d ", payload_len);
+        unsigned char *ch = payload_ptr;
+        int gap;
+        int i;
+        fprintf(log,"\n");
+        for(i = 0; i < payload_len-offset; i++) {
+            fprintf(log,"%02x ", *((unsigned int*)ch) & 0xFF);
+            ch++;
+            /* print extra space after 8th byte for visual aid */
+            if ((i+1)%4 == 0)
+                fprintf(log,"\n");
+        }
+    }
+    fprintf(log,"\n");
+    //fputc('\n', stdout);
 }
 
 void handleErrors(void)
@@ -392,8 +544,9 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	u_int32_t id = get_packet_id(nfa);
 	if (DEBUG) {
         fprintf(log,"\n Printing packet before encrypt\n");
-        print_ip(nfa, NULL);
-		print_pkt(nfa, NULL, 0);
+        /*print_ip(nfa, NULL);
+		print_pkt(nfa, NULL, 0);*/
+        print_pkt_complete(nfa, NULL, 0);
 	}
 	int newpayload_len = 4096;
 	unsigned char newpayload[newpayload_len];
@@ -423,8 +576,9 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     
     if(DEBUG) {
         fprintf(log,"\n Printing packet after encrypt\n");
-        print_ip(nfa, final_payload);
-        print_pkt(nfa, final_payload, newpayload_len);
+        /*print_ip(nfa, final_payload);
+        print_pkt(nfa, final_payload, newpayload_len);*/
+        print_pkt_complete(nfa, final_payload, newpayload_len);
     }
     return nfq_set_verdict(qh, id, NF_ACCEPT, newpayload_len, final_payload);
 }
@@ -567,8 +721,9 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     u_int32_t id = get_packet_id(nfa);
     if (DEBUG) {
         fprintf(log,"\n Printing packet Before Decryption\n");
-        print_ip(nfa, NULL);
-        print_pkt(nfa, NULL, 0);
+       /* print_ip(nfa, NULL);
+        print_pkt(nfa, NULL, 0);*/
+        print_pkt_complete(nfa, NULL, 0);
     }
     
     int newpayload_len = 4096;
@@ -604,8 +759,9 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     
     if(DEBUG) {
         fprintf(log,"\n Printing packet after decrypt\n");
-        print_ip(nfa, final_payload);
-        print_pkt(nfa, final_payload, newpayload_len);
+       /* print_ip(nfa, final_payload);
+        print_pkt(nfa, final_payload, newpayload_len);*/
+        print_pkt_complete(nfa, final_payload, newpayload_len);
     }
     return nfq_set_verdict(qh, id, NF_ACCEPT, newpayload_len, final_payload);
 }
