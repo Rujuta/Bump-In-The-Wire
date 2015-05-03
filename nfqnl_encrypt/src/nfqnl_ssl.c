@@ -426,6 +426,9 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     fprintf(log,"UDP checksum is %04x\n",udph->check);
                     fflush(log);
                   }
+                  
+                  calculate_udp_checksum(iph,(unsigned short*)udph);
+                  
                   if(udph->check != udp_checksum){
                       fprintf(log, "udp checksum calculation is wrong\n");
                       fflush(log);
@@ -439,7 +442,8 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     /* Set new length in IP header */
                     memcpy(buffer, payload, offset);
                     iph = (struct iphdr*) buffer; //typecast  to iphdr 
-                    udph = (struct udphdr*) (buffer + iphdr_len); // CHANGE ThiS 
+                    udph = (struct udphdr*) (buffer + iphdr_len); // CHANGE ThiS
+                    udph->len = htons(ciphertext_len+sizeof(struct udphdr));
                     iph->tot_len = htons(ciphertext_len+offset);
                     calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
@@ -655,6 +659,9 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     fprintf(log,"UDP checksum is %04x\n",udph->check);
                     fflush(log);
                   }
+                  
+                  calculate_udp_checksum(iph,(unsigned short*)udph);
+                  
                   if(udph->check != udp_checksum){
                       fprintf(log, "udp checksum calculation is wrong\n");
                       fflush(log);
@@ -668,6 +675,7 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     memcpy(buffer, payload, offset);
                     iph = (struct iphdr*) buffer; //typecast  to iphdr 
                     udph = (struct udphdr*) (buffer + iphdr_len); // CHANGE ThiS 
+                    udph->len = htons(plaintext_len+sizeof(struct udphdr));
                     /* Set new length in IP header */
                     iph->tot_len = htons(plaintext_len+offset);
                     calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
