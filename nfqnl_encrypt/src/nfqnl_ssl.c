@@ -33,10 +33,6 @@ FILE *log;
 
 
 void calculate_ip_checksum(struct iphdr* iph) {
-    if (DEBUG) {
-      fprintf(log, "entered compute ip checksum\n");
-      fflush(log);
-    }
 	iph->check = 0;
 	register unsigned long sum = 0; 
 	int count = (iph->ihl)*4;//length of the IP header 
@@ -58,36 +54,13 @@ void calculate_ip_checksum(struct iphdr* iph) {
 	}	
 	sum = ~sum;
 	iph->check = (short) sum;  
-    if (DEBUG) {
-      fprintf(log,"\nLeaving compute ip checksum, ip total len:%d\n",ntohs(iph->tot_len));
-    }
 }
 
 void calculate_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
-    if (DEBUG) {
-      fprintf(log, "entering tcp checksum\n");
-      fflush(log);
-    }
     register unsigned long sum = 0;
-	if (DEBUG) {
-      fprintf(log,"\nip total len:%d",ntohs(iph->tot_len));
-      fflush(log);
-      fprintf(log,"\n ip hdr length:%d",(iph->ihl << 2));
-      fflush(log); 
-    }
 	unsigned short tcp_len = ntohs(iph->tot_len) - (iph->ihl << 2); //length of whole packet - ip header 
-    if (DEBUG) {
-      fprintf(log, "got tcp length it is :%d\n",tcp_len);
-      fflush(log);
-    }
-      
 	struct tcphdr *tcph = (struct tcphdr*) ip_payload; // now extract just the tcp header portion 
-	if (DEBUG) {
-      fprintf(log, "got payload\n");
-      fflush(log);
-    }
-
-
+	
 	tcph->check = 0; 
 	//add pseudohdr
 	//the source ip 
@@ -124,31 +97,13 @@ void calculate_tcp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 	sum = ~sum;
 	tcph->check = (unsigned short) sum;
-    if (DEBUG) {
-      fprintf(log, "Leaving tcp checksum\n");
-      fflush(log);
-    }
 }	
 
 
 void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
-    if (DEBUG) {
-      fprintf(log, "entering udp checksum\n");
-      fflush(log);
-    }
     register unsigned long sum = 0;
-    if (DEBUG) {
-      fprintf(log,"\nip total len:%d",ntohs(iph->tot_len));
-      fflush(log);
-      fprintf(log,"\n ip hdr length:%d",(iph->ihl << 2));
-      fflush(log); 
-    }
 	struct udphdr *udph = (struct udphdr*) ip_payload; // now extract just the tcp header portion 
 	int udp_len = htons(udph->len);
-	if (DEBUG) {
-      fprintf(log, "got payload\n");
-      fflush(log);
-    }
 
 	udph->check = 0; 
 	//add pseudohdr
@@ -165,18 +120,12 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 	sum += udph->len;
 	// add the IP payload 
 	udph->check = 0; 
-    if (DEBUG) {
-      fprintf(log, "\nUDP length is %d\n", udp_len);
-      fflush(log);
-    }
+
 	while (udp_len > 1){
 
 		sum += *ip_payload++;
 		udp_len -= 2;
-		//fprintf(log, "udp length:%d\n",udp_len);
-		//fflush(log);
 	}
-
 
 	// if bytes left, add value of that byte as well
 	if (udp_len == 1){
@@ -192,18 +141,9 @@ void calculate_udp_checksum(struct iphdr *iph, unsigned short *ip_payload){
 
 	sum = ~sum;
 	if ((unsigned short) sum == 0x0000){
-        if (DEBUG) {
-          fprintf(log, "\nsum is 0\n");
-          fflush(log);
-        }
         sum = 0xffff;
 	}
 	udph->check = (unsigned short) sum;
-    if (DEBUG) {
-      fprintf(log, "\nLeaving udp checksum\n");
-      fflush(log);
-    }
-
 }
 
 
@@ -226,15 +166,11 @@ void print_ip(struct nfq_data *tb, unsigned char * payload){
 	char str[INET_ADDRSTRLEN];
 	inet_ntop(AF_INET, &(source.sin_addr), str, INET_ADDRSTRLEN);
 	fprintf(log,"Source addr: %s\n",str);
-	fflush(log);
 	inet_ntop(AF_INET, &(dest.sin_addr), str, INET_ADDRSTRLEN);
 	fprintf(log,"Destination addr: %s",str);
 
-	fflush(log);
 	/*Print out packet details*/
 	fprintf(log,"Protocol: %d\n",(unsigned int)iph->protocol);
-
-	fflush(log);
 }
 
 /* returns packet id */
@@ -250,8 +186,6 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 		id = ntohl(ph->packet_id);
 		fprintf(log,"hw_protocol=0x%04x hook=%u id=%u ",
 				ntohs(ph->hw_protocol), ph->hook, id);
-
-		fflush(log);
 	}
 
 	hwph = nfq_get_packet_hw(tb);
@@ -262,8 +196,6 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 		for (i = 0; i < hlen-1; i++)
 			fprintf(log,"%02x:", hwph->hw_addr[i]);
 		fprintf(log,"%02x ", hwph->hw_addr[hlen-1]);
-
-		fflush(log);
 	}
 
 	mark = nfq_get_nfmark(tb);
@@ -285,7 +217,6 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 	if (ifi)
 		fprintf(log,"physoutdev=%u ", ifi);
 
-	fflush(log);
     if (payload == NULL) {
       payload_len = nfq_get_payload(tb, &payload);
     }
@@ -302,14 +233,9 @@ static u_int32_t print_pkt (struct nfq_data *tb, unsigned char *payload, int pay
 			if ((i+1)%4 == 0)
 				fprintf(log,"\n");
 		}
-
-		fflush(log);
-		fprintf(log,"   ");
 	}
-
 	fprintf(log,"\n");
-	fputc('\n', stdout);
-
+	//fputc('\n', stdout);
 	return id;
 }
 
@@ -386,18 +312,9 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
     int offset; 
 
     unsigned short ip_checksum = iph->check;
-    if (DEBUG) {
-      fprintf(log,"\n IP checksum : %04x\n",ip_checksum);
-      fflush(log);
-    }
     calculate_ip_checksum(iph);
-    if (DEBUG) {
-      fprintf(log,"calculated ip checksum: %04x\n",iph->check);
-      fflush(log);
-    }
     if(iph->check!=ip_checksum){
-        fprintf(log,"\n checksum calculation is wrong\n");
-        fflush(log);
+        fprintf(stderr,"\n checksum calculation is wrong\n");
         exit(1);
     }
     
@@ -416,22 +333,13 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                break;
 
         case IPPROTO_UDP: 
-                  if (DEBUG) {
-                    fprintf(log,"\nNow in UDP section\n");
-                    fflush(log);
-                  }
                   udph = (struct udphdr*) (payload + iphdr_len);
                   unsigned udp_checksum = udph->check; 
-                  if (DEBUG) {
-                    fprintf(log,"UDP checksum is %04x\n",udph->check);
-                    fflush(log);
-                  }
                   
                   calculate_udp_checksum(iph,(unsigned short*)udph);
                   
                   if(udph->check != udp_checksum){
-                      fprintf(log, "udp checksum calculation is wrong\n");
-                      fflush(log);
+                      fprintf(stderr, "udp checksum calculation is wrong\n");
                       exit(1);
                   }
 
@@ -447,58 +355,26 @@ static int encrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     iph->tot_len = htons(ciphertext_len+offset);
                     calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
-                  if (DEBUG) {
-                    fprintf(log,"\nRecalculatng udp checksum\n");
-                    fflush(log);
-
-                    fprintf(log,"recalculated udp checksum: %04x\n",udph->check); 
-                    fflush(log);
-                  }
                   break;
-
         case IPPROTO_TCP:
-                  if (DEBUG) {
-                    fprintf(log,"\nOkay now in tcp SECTION\n");
-                    fflush(log); 
-                  }
                   tcph = (struct tcphdr*) (payload + iphdr_len); // CHANGE ThiS 
 
                   unsigned tcp_checksum = tcph->check;
-                  if (DEBUG) {
-                    fprintf(log, "Tcp checksum is %04x\n",tcph->check);
-                    fflush(log);
-                  }
                   calculate_tcp_checksum(iph,(unsigned short*)tcph);
-                  if (DEBUG) {
-                    fprintf(log, "Calculated Tcp checksum is %04x\n",tcph->check);
-                    fflush(log);
-                  }
                   if(tcph->check != tcp_checksum){
-                      fprintf(log, "tcp checksum calculation is wrong\n");
-                      fflush(log);
+                      fprintf(stderr, "tcp checksum calculation is wrong\n");
                       exit(1);
                   }
                   offset = iphdr_len + sizeof(struct tcphdr);
                   ciphertext = buffer+offset;
                   ciphertext_len = encrypt_data(payload+offset, payload_len-offset,key, iv,ciphertext);
                   if (ciphertext_len >= 0) {
-                    if (DEBUG) {
-                      fprintf(log, "\nciphertext_len in hex is %04x\n", (unsigned short)ciphertext_len);
-                      fflush(log);
-                    }
                     memcpy(buffer, payload, offset);
                     iph = (struct iphdr*) buffer; //typecast  to iphdr 
                     tcph = (struct tcphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     /* Set new length in IP header */
                     iph->tot_len = htons(ciphertext_len+offset);
                     calculate_tcp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
-                  }
-                  if (DEBUG) {
-                    fprintf(log,"\nRecalculatng tcp checksum\n");
-                    fflush(log);
-
-                    fprintf(log,"recalculated tcp checksum: %04x\n",tcph->check); 
-                    fflush(log);
                   }
                   break;
     }
@@ -515,13 +391,9 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 {
 	u_int32_t id = get_packet_id(nfa);
 	if (DEBUG) {
-		fprintf(log,"entering encrypt callback\n");
         fprintf(log,"\n Printing packet before encrypt\n");
-		fflush(log);
         print_ip(nfa, NULL);
 		print_pkt(nfa, NULL, 0);
-		fflush(log);
-
 	}
 	int newpayload_len = 4096;
 	unsigned char newpayload[newpayload_len];
@@ -544,8 +416,7 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
     
     if (newpayload_len < 0) {
         if (DEBUG) {
-          fprintf(log,"\n ENCRYPTION FAILED \n");
-          fflush(log);
+          fprintf(log,"\n encryption appears to have failed. Sending as plaintext \n");
         }
         newpayload_len = nfq_get_payload(nfa,&final_payload);
     }
@@ -554,8 +425,6 @@ static int cb_encrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         fprintf(log,"\n Printing packet after encrypt\n");
         print_ip(nfa, final_payload);
         print_pkt(nfa, final_payload, newpayload_len);
-        fprintf(log,"\nDone with Call back\n");
-        fflush(log);
     }
     return nfq_set_verdict(qh, id, NF_ACCEPT, newpayload_len, final_payload);
 }
@@ -618,19 +487,10 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
     int offset; 
 
     unsigned short ip_checksum = iph->check;
-    if (DEBUG) {
-      fprintf(log,"\n IP checksum : %04x\n",ip_checksum);
-      fflush(log);
-    }
     calculate_ip_checksum(iph);
-    if (DEBUG) {
-      fprintf(log,"calculated ip checksum: %04x\n",iph->check);
-      fflush(log);
-    }
     if(iph->check!=ip_checksum){
 
-        fprintf(log,"\n checksum calculation is wrong\n");
-        fflush(log);
+        fprintf(stderr,"\n checksum calculation is wrong\n");
         exit(1);
     }
     
@@ -649,22 +509,13 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                break;
 
         case IPPROTO_UDP: 
-                  if (DEBUG) {
-                    fprintf(log,"\nNow in UDP section\n");
-                    fflush(log);
-                  }
                   udph = (struct udphdr*) (payload + iphdr_len);
                   unsigned udp_checksum = udph->check; 
-                  if (DEBUG) {
-                    fprintf(log,"UDP checksum is %04x\n",udph->check);
-                    fflush(log);
-                  }
                   
                   calculate_udp_checksum(iph,(unsigned short*)udph);
                   
                   if(udph->check != udp_checksum){
-                      fprintf(log, "udp checksum calculation is wrong\n");
-                      fflush(log);
+                      fprintf(stderr, "udp checksum calculation is wrong\n");
                       exit(1);
                   }
 
@@ -680,35 +531,15 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     iph->tot_len = htons(plaintext_len+offset);
                     calculate_udp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
                   }
-                  if (DEBUG) {
-                    fprintf(log,"\nRecalculatng udp checksum\n");
-                    fflush(log);
-
-                    fprintf(log,"recalculated udp checksum: %04x\n",udph->check); 
-                    fflush(log);
-                  }
                   break;
 
         case IPPROTO_TCP:
-                  if (DEBUG) {
-                    fprintf(log,"\nOkay now in tcp SECTION\n");
-                    fflush(log); 
-                  }
                   tcph = (struct tcphdr*) (payload + iphdr_len); // CHANGE ThiS 
 
                   unsigned tcp_checksum = tcph->check;
-                  if (DEBUG) {
-                    fprintf(log, "Tcp checksum is %04x\n",tcph->check);
-                    fflush(log);
-                  }
                   calculate_tcp_checksum(iph,(unsigned short*)tcph);
-                  if (DEBUG) {
-                    fprintf(log, "Calculated Tcp checksum is %04x\n",tcph->check);
-                    fflush(log);
-                  }
                   if(tcph->check != tcp_checksum){
-                      fprintf(log, "tcp checksum calculation is wrong\n");
-                      fflush(log);
+                      fprintf(stderr, "tcp checksum calculation is wrong\n");
                       exit(1);
                   }
                   offset = iphdr_len + sizeof(struct tcphdr);
@@ -719,19 +550,8 @@ static int decrypt_calc_checksum(struct nfq_data *tb, unsigned char *key, unsign
                     iph = (struct iphdr*) buffer; //typecast  to iphdr 
                     tcph = (struct tcphdr*) (buffer + iphdr_len); // CHANGE ThiS 
                     /* Set new length in IP header */
-                    if (DEBUG) {
-                      fprintf(log, "\nplaintext_len in hex is %04x\n", (unsigned short)plaintext_len);
-                      fflush(log);
-                    }
                     iph->tot_len = htons(plaintext_len+offset);
                     calculate_tcp_checksum(iph,(unsigned short*)(buffer+iphdr_len));
-                  }
-                  if (DEBUG) {
-                    fprintf(log,"\nRecalculatng tcp checksum\n");
-                    fflush(log);
-
-                    fprintf(log,"recalculated tcp checksum: %04x\n",tcph->check); 
-                    fflush(log);
                   }
                   break;
     }     
@@ -746,9 +566,7 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 {
     u_int32_t id = get_packet_id(nfa);
     if (DEBUG) {
-        fprintf(log,"entering decrypt callback\n");
         fprintf(log,"\n Printing packet Before Decryption\n");
-        fflush(log);
         print_ip(nfa, NULL);
         print_pkt(nfa, NULL, 0);
     }
@@ -779,8 +597,7 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
     if (newpayload_len < 0) {
       if (DEBUG) {
-          fprintf(log,"\n DECRYPTION FAILED \n");
-          fflush(log);
+          fprintf(log,"\n It seems that decryption failed. Passing along encrypted packet. \n");
       }
       newpayload_len = nfq_get_payload(nfa,&final_payload);
     }
@@ -789,24 +606,18 @@ static int cb_decrypt(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
         fprintf(log,"\n Printing packet after decrypt\n");
         print_ip(nfa, final_payload);
         print_pkt(nfa, final_payload, newpayload_len);
-        fprintf(log,"\nDone with Call back\n");
-        fflush(log);
     }
     return nfq_set_verdict(qh, id, NF_ACCEPT, newpayload_len, final_payload);
 }
 
 void unbind_queue(struct nfq_handle *h){
     if (DEBUG) {
-      printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
+      fprintf(log, "unbinding existing nf_queue handler for AF_INET (if any)\n");
     }
 	if (nfq_unbind_pf(h, AF_INET) < 0) {
 		fprintf(stderr, "error during nfq_unbind_pf()\n");
 		exit(1);
 	}
-	if (DEBUG) {
-      printf("\n Done unbinding\n");
-      fflush(stdout);
-    }
 }
 
 struct nfq_handle* open_queue(){
@@ -820,14 +631,14 @@ struct nfq_handle* open_queue(){
 }
 struct nfq_q_handle* bind_queue(struct nfq_handle *h, int queue_num, nfq_callback *cb){
 	if (DEBUG)
-      printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
+      fprintf(log, "binding nfnetlink_queue as nf_queue handler for AF_INET\n");
 	if (nfq_bind_pf(h, AF_INET) < 0) {
 		fprintf(stderr, "error during nfq_bind_pf()\n");
 		exit(1);
 	}
     struct nfq_q_handle *qh;
     if (DEBUG)
-      printf("binding this socket to queue equals %d\n",queue_num);
+      fprintf(log, "binding this socket to queue equals %d\n",queue_num);
 	qh = nfq_create_queue(h,  queue_num, cb, NULL);
 	if (!qh) {
 		fprintf(stderr, "error during nfq_create_queue()\n");
@@ -838,7 +649,7 @@ struct nfq_q_handle* bind_queue(struct nfq_handle *h, int queue_num, nfq_callbac
 
 void set_packet_copy_mode(struct nfq_q_handle *qh){
 	if (DEBUG)
-      printf("setting copy_packet mode\n");
+      fprintf(log, "setting copy_packet mode\n");
 	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
 		fprintf(stderr, "can't set packet_copy mode\n");
 		exit(1);
@@ -859,11 +670,11 @@ int main(int argc, char **argv)
 	//add both descriptors to the set
 	log = fopen("log.txt","w");
 	if (log == NULL){
-		printf("\nError opening file\n");
+		fprintf(stderr, "\nError opening file\n");
 		exit(1);
 	}
 	if (DEBUG)
-      printf("opening library handle for both incoming and outgoing queues\n");
+      fprintf(log, "opening library handle for both incoming and outgoing queues\n");
 
 	h_in_lan = open_queue();
 	unbind_queue(h_in_lan);
@@ -897,15 +708,14 @@ int main(int argc, char **argv)
         rv_wan = -1;
         temp_mask = read_sd;		
 		num = select(max_sd+1, &temp_mask, &dummy_mask, &dummy_mask, NULL);
-		if (num > 0 ){
+		if (num > 0 ) {
 			if (FD_ISSET(fd_in_lan, &temp_mask)){
 				if (DEBUG){
 					fprintf(log,"pkt received from LAN\n");
-					fflush(log);
 				}
 				rv_lan = recv(fd_in_lan, buf_in_lan, sizeof(buf_in_lan),0);
 				if (rv_lan < 0) {
-					printf("\nSome error in receiving LAN packet\n");
+					fprintf(log, "\nSome error in receiving LAN packet\n");
                     /* Call some sort of "clean up and exit" fxn. Or Maybe use a goto?*/                
                 }
 
@@ -914,30 +724,25 @@ int main(int argc, char **argv)
 			if (FD_ISSET(fd_in_wan,&temp_mask)) {
 				if (DEBUG){
 					fprintf(log,"\n Packet received from WAN\n");
-					fflush(log);
 				}
 				rv_wan = recv(fd_in_wan, buf_in_wan, sizeof(buf_in_wan), 0 );
 				if (rv_wan < 0)
-					printf("\n Some error in receiving WAN packet\n");
+					fprintf(log, "\n Some error in receiving WAN packet\n");
 			}
 			if (rv_lan >= 0) {
-              if (DEBUG) {
-                  fprintf(log,"Going to handle LAN packet now");
-                  fflush(log);
-              }
               nfq_handle_packet(h_in_lan, buf_in_lan, rv_lan);
             }
             if (rv_wan >= 0) {
-              if (DEBUG) {
-                  fprintf(log,"Going to handle WAN packet now");
-                  fflush(log);
-              }
               nfq_handle_packet(h_in_wan, buf_in_wan, rv_wan);
-            }  
+            }
+            if (DEBUG) {
+              /* flush log after handling packets to better ensure debug prints written to log. */
+              fflush(log);
+            }
 		}
 	}	
     if (DEBUG)
-      printf("unbinding from queue 0\n");
+      fprintf(log, "unbinding from queues\n");
 	nfq_destroy_queue(qh_in_lan);
 	nfq_destroy_queue(qh_in_wan);
 
@@ -945,12 +750,12 @@ int main(int argc, char **argv)
 	/* normally, applications SHOULD NOT issue this command, since
 	 * it detaches other programs/sockets from AF_INET, too ! */
     if (DEBUG)
-      printf("unbinding from AF_INET\n");
+      fprintf(log, "unbinding from AF_INET\n");
 	nfq_unbind_pf(h_in_lan, AF_INET);
 	nfq_unbind_pf(h_in_wan, AF_INET);
 #endif
     if (DEBUG)
-      printf("closing library handle\n");
+      fprintf(log, "closing library handle\n");
 	nfq_close(h_in_lan);
 	nfq_close(h_in_wan);
     
