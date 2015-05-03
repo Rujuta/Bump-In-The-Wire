@@ -20,7 +20,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#define DEBUG 0
+#define DEBUG 1
 #define TCP 6
 #define ICMP 1
 #define UDP 17
@@ -274,13 +274,13 @@ int print_tcp_hdr(struct tcphdr *tp) {
     urp = ntohs(tp->urg_ptr);
     checksum = ntohs(tp->check);
     len = ntohs(tp->doff);
-    len = ((len >> 4)&0x00FF)<<2;
+    len = ((len >> 8)&0xFF)<<2;
 
     fprintf(log, "TCP header:\n");
-    fprintf(log, "source port: %d, ", sport);
-    fprintf(log, "dest port: %d, ", dport);
-    fprintf(log, "seq num: %d, ", seq);
-    fprintf(log, "ack num: %d, ", ack);
+    fprintf(log, "source port: %u, ", sport);
+    fprintf(log, "dest port: %u, ", dport);
+    fprintf(log, "seq num: %u, ", seq);
+    fprintf(log, "ack num: %u, ", ack);
     fprintf(log, "Header size: %d bytes, ", len);
     fprintf(log, "checksum (hex): %04x\n", checksum);
     return len;
@@ -295,8 +295,8 @@ int print_udp_hdr(struct udphdr *up) {
     len = ntohs(up->len);
 
     fprintf(log, "UDP header:\n");
-    fprintf(log, "source port: %d, ", sport);
-    fprintf(log, "dest port: %d, ", dport);
+    fprintf(log, "source port: %u, ", sport);
+    fprintf(log, "dest port: %u, ", dport);
     fprintf(log, "Datagram size: %d bytes, ", len);
     fprintf(log, "checksum (hex): %04x\n", checksum);
     return sizeof(struct udphdr);
